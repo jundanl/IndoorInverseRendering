@@ -1,2 +1,5 @@
+.idea/
+pretrained_model/
+
 __pycache__
 exps
