@@ -32,12 +32,13 @@ class MGNetTest(pl.LightningModule):
         else:
             raise ValueError("Image list not identified")
         self.imList = [os.path.basename(x.strip()) for x in self.imList]
-        os.makedirs(os.path.join(self.test_dir, self.exp_name), exist_ok=True)
-        os.makedirs(os.path.join(self.test_dir, self.exp_name, 'albedo'), exist_ok=True)
-        os.makedirs(os.path.join(self.test_dir, self.exp_name, 'depth'), exist_ok=True)
-        os.makedirs(os.path.join(self.test_dir, self.exp_name, 'normal'), exist_ok=True)
-        os.makedirs(os.path.join(self.test_dir, self.exp_name, 'roughness'), exist_ok=True)
-        os.makedirs(os.path.join(self.test_dir, self.exp_name, 'metallic'), exist_ok=True)
+        self.out_dir = os.path.join("out", self.test_dir)
+        os.makedirs(os.path.join(self.out_dir, self.exp_name), exist_ok=True)
+        os.makedirs(os.path.join(self.out_dir, self.exp_name, 'albedo'), exist_ok=True)
+        os.makedirs(os.path.join(self.out_dir, self.exp_name, 'depth'), exist_ok=True)
+        os.makedirs(os.path.join(self.out_dir, self.exp_name, 'normal'), exist_ok=True)
+        os.makedirs(os.path.join(self.out_dir, self.exp_name, 'roughness'), exist_ok=True)
+        os.makedirs(os.path.join(self.out_dir, self.exp_name, 'metallic'), exist_ok=True)
     
     def forward(self):
         pass
@@ -78,15 +79,31 @@ class MGNetTest(pl.LightningModule):
         albedoPred = torch.clamp(albedoPred, 0, 1)
         depthPred = torch.clamp(depthPred, min=0)
         depthPred /= torch.max(depthPred)
-        normalPred = (normalPred + 1) * 0.5
+        # normalPred = (normalPred + 1) * 0.5
+        vis_normalPred = (normalPred + 1) * 0.5
         
         if not is_hdr:
             im = im ** (1/2.2)
-        utils.plot_images_wo_gt(albedoPred, im, os.path.join(self.test_dir, self.exp_name, f'albedo/{batch_nb:04d}.png'))
-        utils.plot_images_wo_gt(normalPred, im, os.path.join(self.test_dir, self.exp_name, f'normal/{batch_nb:04d}.png'))
-        utils.plot_images_wo_gt(depthPred[:,0,:,:], im, os.path.join(self.test_dir, self.exp_name, f'depth/{batch_nb:04d}.png'), colormap='magma')
-        utils.plot_images_wo_gt(matPred[:,0,:,:], im, os.path.join(self.test_dir, self.exp_name, f'roughness/{batch_nb:04d}.png'), colormap='jet')
-        utils.plot_images_wo_gt(matPred[:,1,:,:], im, os.path.join(self.test_dir, self.exp_name, f'metallic/{batch_nb:04d}.png'), colormap='jet')
+        utils.plot_images_wo_gt(albedoPred, im, os.path.join(self.out_dir, self.exp_name, f'albedo/{batch_nb:04d}.png'))
+        utils.plot_images_wo_gt(vis_normalPred, im, os.path.join(self.out_dir, self.exp_name, f'normal/{batch_nb:04d}.png'))
+        utils.plot_images_wo_gt(depthPred[:,0,:,:], im, os.path.join(self.out_dir, self.exp_name, f'depth/{batch_nb:04d}.png'), colormap='magma')
+        utils.plot_images_wo_gt(matPred[:,0,:,:], im, os.path.join(self.out_dir, self.exp_name, f'roughness/{batch_nb:04d}.png'), colormap='jet')
+        utils.plot_images_wo_gt(matPred[:,1,:,:], im, os.path.join(self.out_dir, self.exp_name, f'metallic/{batch_nb:04d}.png'), colormap='jet')
+
+        # save raw albedo and surface normal predictions
+        assert albedoPred.shape[0] == 1,   "Batch size should be 1"
+        filename = os.path.basename(imName).split('.')[0]
+        albedo_npy = albedoPred[0].detach().cpu().numpy().transpose(1, 2, 0)
+        normal_npy = normalPred[0].detach().cpu().numpy().transpose(1, 2, 0)
+        out_dir = os.path.join(self.out_dir, self.exp_name, "raw")
+        os.makedirs(out_dir, exist_ok=True)
+        out_albedo_path = os.path.join(out_dir, f'{filename}_r.npy')
+        out_normal_path = os.path.join(out_dir, f'{filename}_n.npy')
+        np.save(out_albedo_path, albedo_npy)
+        np.save(out_normal_path, normal_npy)
+        utils.plot_images_wo_gt(albedoPred, None, os.path.join(out_dir, f'{filename}_r.png'))
+        utils.plot_images_wo_gt(vis_normalPred, None, os.path.join(out_dir, f'{filename}_n.png'))
+
 
 
 def parse_args():
@@ -117,6 +134,7 @@ if __name__ == '__main__':
     if not opt.ckpt.endswith('.ckpt'):
         opt.ckpt += '.ckpt'
     ckpt_path = os.path.join(cfg.experiment.path_logs, cfg.experiment.id, f'version_{opt.version}', f'checkpoint/{opt.ckpt}')
+    assert os.path.exists(ckpt_path), f"Checkpoint file not found: {ckpt_path}"
     system = MGNetTest.load_from_checkpoint(
         ckpt_path,
         map_location=f'cuda:{opt.gpuId}',

@@ -20,7 +20,10 @@ def plot_images(gt, pred, image, mask, filename, colormap=None):
 def plot_images_wo_gt(pred, image, filename, colormap=None):
     B = pred.shape[0]
     if not colormap:
-        img = torch.cat((image, pred), dim=0)
+        if image is not None:
+            img = torch.cat((image, pred), dim=0)
+        else:
+            img = pred
     else:
         img = pred.cpu().numpy()
         colormap = cm.get_cmap(colormap)
