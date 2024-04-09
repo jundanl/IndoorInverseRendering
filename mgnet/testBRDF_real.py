@@ -69,6 +69,8 @@ class MGNetTest(pl.LightningModule):
             im_orig = (im_orig.astype(np.float32)**2.2 / 255.0)
         else:
             im = np.transpose(im, [2, 0, 1] )[np.newaxis, :, :, :]
+            if im.dtype == np.uint8:
+                im = im.astype(np.float32) / 255.0
             im = torch.from_numpy(im)
         im = im.cuda()
         featrues = self.models['encoder'](im)
